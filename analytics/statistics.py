@@ -211,6 +211,26 @@ class TradingAnalytics:
         except Exception as e:
             print(f"❌ Error calculating statistics: {e}")
             return {}
+    
+    def calculate_volume_profile(self, df, bins=20):
+        """
+        Calculate volume profile (volume at price levels)
+        
+        Args:
+            df (pd.DataFrame): DataFrame with price and quantity
+            bins (int): Number of price bins
+        
+        Returns:
+            pd.DataFrame: Volume profile
+        """
+        try:
+            df = df.copy()
+            df['price_bin'] = pd.cut(df['price'], bins=bins)
+            volume_profile = df.groupby('price_bin')['quantity'].sum()
+            return volume_profile.reset_index()
+        except Exception as e:
+            print(f"❌ Error calculating volume profile: {e}")
+            return pd.DataFrame()
 
 
 if __name__ == "__main__":
