@@ -1,5 +1,5 @@
 """
-Background WebSocket runner - CLEAN VERSION
+Background WebSocket - WORKING VERSION
 """
 import time
 from datetime import datetime
@@ -7,54 +7,59 @@ from backend.database import init_database, save_tick, get_tick_count
 from binance import ThreadedWebsocketManager
 
 def main():
-    print("🚀 BACKGROUND WEBSOCKET RUNNER")
-    print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    print("🚀 Starting WebSocket Data Collection")
+    print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     
     init_database()
     
-    # Simple counter
-    tick_count = {'count': 0, 'last_print': time.time()}
+    tick_stats = {'count': 0, 'last_print': time.time()}
     
-    def handle_tick(msg):
-        if msg.get('e') == 'trade':
-            tick_data = {
-                'timestamp': msg['T'],
-                'symbol': msg['s'],
-                'price': float(msg['p']),
-                'quantity': float(msg['q'])
-            }
-            save_tick(tick_data)
-            tick_count['count'] += 1
-            
-            # Print every 10 seconds
-            if time.time() - tick_count['last_print'] > 10:
-                btc = get_tick_count('BTCUSDT')
-                eth = get_tick_count('ETHUSDT')
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] BTC: {btc:,} | ETH: {eth:,} | Rate: {tick_count['count']/10:.1f}/sec")
-                tick_count['count'] = 0
-                tick_count['last_print'] = time.time()
+    def handle_message(msg):
+        try:
+            if msg.get('e') == 'trade':
+                tick_data = {
+                    'timestamp': msg['T'],
+                    'symbol': msg['s'],
+                    'price': float(msg['p']),
+                    'quantity': float(msg['q'])
+                }
+                save_tick(tick_data)
+                tick_stats['count'] += 1
+                
+                now = time.time()
+                if now - tick_stats['last_print'] >= 10:
+                    btc = get_tick_count('BTCUSDT')
+                    eth = get_tick_count('ETHUSDT')
+                    rate = tick_stats['count'] / 10
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] "
+                          f"BTC: {btc:,} | ETH: {eth:,} | Rate: {rate:.1f}/sec")
+                    tick_stats['count'] = 0
+                    tick_stats['last_print'] = now
+        except:
+            pass
     
-    # Start WebSocket
     twm = ThreadedWebsocketManager()
     twm.start()
-    twm.start_trade_socket(callback=handle_tick, symbol='btcusdt')
-    twm.start_trade_socket(callback=handle_tick, symbol='ethusdt')
+    time.sleep(1)
     
-    print("✅ WebSocket running! Press Ctrl+C to stop.\n")
+    twm.start_trade_socket(callback=handle_message, symbol='btcusdt')
+    twm.start_trade_socket(callback=handle_message, symbol='ethusdt')
+    
+    print("✅ WebSocket started!")
+    print("📊 Collecting data (Ctrl+C to stop)\n")
     
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\n⚠️  Stopping...")
+        print("\n🛑 Stopping...")
         try:
             twm.stop()
         except:
             pass
-        
         btc = get_tick_count('BTCUSDT')
         eth = get_tick_count('ETHUSDT')
-        print(f"\n📊 FINAL: BTC: {btc:,} | ETH: {eth:,} | Total: {btc+eth:,}")
+        print(f"\n📊 Final: BTC={btc:,} ETH={eth:,}")
 
 if __name__ == "__main__":
     main()
