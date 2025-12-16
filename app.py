@@ -1,6 +1,6 @@
 """
 Real-Time Crypto Analytics Dashboard - ENHANCED VERSION
-Includes: Volume analysis, OHLC upload, advanced features
+Includes: Volume analysis, OHLC upload, advanced features, WebSocket control
 """
 import streamlit as st
 import pandas as pd
@@ -9,9 +9,11 @@ from plotly.subplots import make_subplots
 import time
 from datetime import datetime
 import io
+import threading
 
 # Import our modules
 from backend.database import init_database, get_recent_data, get_tick_count, save_tick
+from backend.websocket_client import BinanceWebSocketClient
 from backend.data_processor import DataProcessor
 from analytics.statistics import TradingAnalytics
 from analytics.alerts import AlertManager, create_default_alerts
@@ -31,6 +33,8 @@ if 'alert_manager' not in st.session_state:
     st.session_state.alert_manager = create_default_alerts()
 if 'uploaded_data' not in st.session_state:
     st.session_state.uploaded_data = None
+if 'ws_client' not in st.session_state:
+    st.session_state.ws_client = None
 
 # Initialize database
 init_database()
@@ -98,6 +102,44 @@ with col3:
 
 with col4:
     st.metric("Symbols", len(symbols))
+
+st.markdown("---")
+
+# WebSocket Control Section
+col_ws1, col_ws2 = st.columns([1, 3])
+
+with col_ws1:
+    button_label = "🟢 Start WebSocket" if not st.session_state.websocket_started else "🔴 Stop WebSocket"
+    if st.button(button_label, type="primary", use_container_width=True):
+        if not st.session_state.websocket_started:
+            # Start WebSocket in background
+            try:
+                if len(symbols) > 0:
+                    ws_client = BinanceWebSocketClient(symbols)
+                    ws_thread = threading.Thread(target=ws_client.run, daemon=True)
+                    ws_thread.start()
+                    st.session_state.ws_client = ws_client
+                    st.session_state.websocket_started = True
+                    st.success("✅ WebSocket started!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ Please select at least one symbol first!")
+            except Exception as e:
+                st.error(f"❌ Failed to start WebSocket: {e}")
+        else:
+            # Stop WebSocket
+            st.session_state.websocket_started = False
+            st.session_state.ws_client = None
+            st.info("⏸️ WebSocket stopped")
+            time.sleep(1)
+            st.rerun()
+
+with col_ws2:
+    if st.session_state.websocket_started:
+        st.success(f"📡 Receiving live data from Binance for {', '.join(symbols)}")
+    else:
+        st.warning("⚠️ Click 'Start WebSocket' to begin receiving live market data")
 
 st.markdown("---")
 
@@ -196,7 +238,7 @@ with tab1:
                 else:
                     st.info(f"⏳ Waiting for {symbol} data...")
             else:
-                st.info(f"⏳ No data yet for {symbol}")
+                st.info(f"⏳ No data yet for {symbol} - Start WebSocket to collect data")
 
 # Tab 2: Spread Analysis (if 2 symbols)
 if len(symbols) == 2:
@@ -301,7 +343,7 @@ if len(symbols) == 2:
             else:
                 st.info("⏳ Waiting for data...")
         else:
-            st.info("⏳ No data yet")
+            st.info("⏳ No data yet - Start WebSocket to collect data")
 
 # Tab 3: Statistics
 stats_tab = tab3 if len(symbols) == 2 else tab2
