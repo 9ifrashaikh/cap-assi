@@ -115,9 +115,18 @@ with col_ws1:
             # Start WebSocket in background
             try:
                 if len(symbols) > 0:
-                    ws_client = BinanceWebSocketClient(symbols)
-                    ws_thread = threading.Thread(target=ws_client.run, daemon=True)
-                    ws_thread.start()
+                    # Import the database save function
+                    from backend.database import save_tick
+                    
+                    # Create client with lowercase symbols (Binance requires lowercase)
+                    ws_client = BinanceWebSocketClient([s.lower() for s in symbols])
+                    
+                    # Add callback to save data to database
+                    ws_client.add_callback(save_tick)
+                    
+                    # Start the client (creates its own thread internally)
+                    ws_client.start()
+                    
                     st.session_state.ws_client = ws_client
                     st.session_state.websocket_started = True
                     st.success("✅ WebSocket started!")
@@ -129,6 +138,11 @@ with col_ws1:
                 st.error(f"❌ Failed to start WebSocket: {e}")
         else:
             # Stop WebSocket
+            try:
+                if st.session_state.ws_client:
+                    st.session_state.ws_client.stop()
+            except:
+                pass
             st.session_state.websocket_started = False
             st.session_state.ws_client = None
             st.info("⏸️ WebSocket stopped")
